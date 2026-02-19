@@ -100,52 +100,89 @@ export default function Home() {
     setDraggedIndex(null);
   };
 
-  const generateHTML = () => {
-    let html = '<table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">\n';
+  const generateHTML = (forEmail: boolean = false) => {
+    // Email-safe HTML generation compatible with all major clients
+    // Uses table-based layout which works universally
+    
+    let html = '';
+    
+    if (!forEmail) {
+      // Include DOCTYPE and html structure for standalone HTML files
+      html += '<!DOCTYPE html>\n<html>\n<head>\n';
+      html += '<meta charset="UTF-8">\n';
+      html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+      html += '<title>Email Signature</title>\n';
+      html += '</head>\n<body style="margin: 0; padding: 20px; font-family: Arial, sans-serif;">\n';
+    }
+    
+    // Main signature table - compatible with all email clients
+    html += '<table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.4; color: #333333;">\n';
+    html += '<tbody>\n';
 
     elements.forEach((element) => {
       if (element.type === 'divider') {
-        html += '<tr><td height="10"></td></tr>\n';
-        html += '<tr><td style="border-top: 1px solid #ccc;" height="1"></td></tr>\n';
-        html += '<tr><td height="10"></td></tr>\n';
+        html += '<tr><td height="10" style="line-height: 10px;"></td></tr>\n';
+        html += '<tr><td><div style="border-top: 1px solid #cccccc; height: 0; line-height: 0;"></div></td></tr>\n';
+        html += '<tr><td height="10" style="line-height: 10px;"></td></tr>\n';
       } else if (element.type === 'input' && element.value) {
-        html += '<tr><td style="padding: 2px 0;">';
+        html += '<tr>\n<td style="padding: 2px 0; font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.4; color: #333333;">';
+        
         if (element.label === 'Email') {
-          html += `<a href="mailto:${element.value}" style="color: #0066cc; text-decoration: none;">${element.value}</a>`;
+          // Email links are safe in all clients
+          html += `<a href="mailto:${element.value.trim()}" style="color: #0066cc; text-decoration: none; font-weight: normal;">${element.value}</a>`;
         } else if (element.label === 'Phone') {
-          html += `<a href="tel:${element.value}" style="color: #0066cc; text-decoration: none;">${element.value}</a>`;
+          // Phone links work in most clients
+          html += `<a href="tel:${element.value.trim().replace(/\s+/g, '')}" style="color: #0066cc; text-decoration: none; font-weight: normal;">${element.value}</a>`;
         } else if (element.label === 'Website') {
-          html += `<a href="${element.value}" target="_blank" style="color: #0066cc; text-decoration: none;">${element.value}</a>`;
+          // Website links - avoid target="_blank" for email safety
+          html += `<a href="${element.value.trim()}" style="color: #0066cc; text-decoration: none; font-weight: normal;">${element.value}</a>`;
         } else {
-          html += element.value;
+          // Regular text - all styles inline
+          html += element.value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
-        html += '</td></tr>\n';
+        html += '</td>\n</tr>\n';
       }
     });
 
-    html += '</table>';
+    html += '</tbody>\n</table>\n';
+    
+    if (!forEmail) {
+      html += '</body>\n</html>';
+    }
+    
     return html;
   };
 
+  const [copyFeedback, setCopyFeedback] = useState<'idle' | 'success'>('idle');
+
   const copyToClipboard = () => {
-    const html = generateHTML();
+    // Generate email-safe HTML (without full page structure)
+    const html = generateHTML(true);
     navigator.clipboard.writeText(html).then(() => {
-      alert('HTML copied to clipboard!');
+      setCopyFeedback('success');
+      setTimeout(() => setCopyFeedback('idle'), 2000);
+    }).catch(() => {
+      alert('Failed to copy. Please try again.');
     });
   };
 
   const downloadHTML = () => {
-    const html = generateHTML();
-    const element = document.createElement('a');
-    element.setAttribute(
-      'href',
-      'data:text/html;charset=utf-8,' + encodeURIComponent(html)
-    );
-    element.setAttribute('download', 'signature.html');
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+    // Generate complete HTML file with structure
+    const html = generateHTML(false);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'email-signature.html');
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   };
 
   return (
@@ -268,9 +305,13 @@ export default function Home() {
               <div className="space-y-3">
                 <button
                   onClick={copyToClipboard}
-                  className="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                  className={`w-full px-4 py-3 rounded-lg transition font-semibold text-white ${
+                    copyFeedback === 'success'
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
-                  📋 Copy HTML to Clipboard
+                  {copyFeedback === 'success' ? '✓ Copied!' : '📋 Copy HTML to Clipboard'}
                 </button>
                 <button
                   onClick={downloadHTML}
@@ -282,13 +323,21 @@ export default function Home() {
             </div>
 
             {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <p className="text-sm text-blue-900 mb-2">
-                <span className="font-semibold">💡 Tip:</span> This HTML works in Gmail, Outlook, Apple Mail, and more.
-              </p>
-              <p className="text-xs text-blue-800">
-                Paste the HTML directly into your email signature settings.
-              </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-3">
+              <div>
+                <p className="text-sm text-blue-900 font-semibold mb-2">✅ Email Client Compatible</p>
+                <p className="text-xs text-blue-800 space-y-1">
+                  <div>• Gmail - Works perfectly</div>
+                  <div>• Outlook - Windows & Mac</div>
+                  <div>• Apple Mail - All versions</div>
+                  <div>• Yahoo Mail - Compatible</div>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-800">
+                  <span className="font-semibold">How to use:</span> Copy the HTML above and paste into your email client's signature settings.
+                </p>
+              </div>
             </div>
           </div>
         </div>
